@@ -262,6 +262,8 @@ export async function streamImport(filePath: string, requestId: string): Promise
 
   // 成员ID映射（platformId -> dbId）
   const memberIdMap = new Map<string, number>()
+  // 成员原始昵称映射（platformId -> nickname），用于过滤虚假的昵称变更
+  const memberNicknameMap = new Map<string, string>()
   // 昵称追踪器（收集所有变化，最后批量写入）
   const nicknameTracker = new Map<
     string,
@@ -352,13 +354,24 @@ export async function streamImport(filePath: string, requestId: string): Promise
 
       onMembers: (members: ParsedMember[]) => {
         console.log(`[StreamImport] 收到 ${members.length} 个成员`)
+        let nicknameCount = 0
         for (const member of members) {
           insertMember.run(member.platformId, member.name, member.nickname || null)
           const row = getMemberId.get(member.platformId) as { id: number } | undefined
           if (row) {
             memberIdMap.set(member.platformId, row.id)
           }
+          // 存储原始昵称，用于过滤虚假的昵称变更
+          if (member.nickname) {
+            memberNicknameMap.set(member.platformId, member.nickname)
+            nicknameCount++
+            // 调试日志（前 10 个）
+            if (nicknameCount <= 10) {
+              console.log(`[昵称映射] platformId=${member.platformId}, name="${member.name}", nickname="${member.nickname}"`)
+            }
+          }
         }
+        console.log(`[StreamImport] 已存储 ${nicknameCount} 个成员的原始昵称`)
       },
 
       onMessageBatch: (messages: ParsedMessage[]) => {
@@ -412,17 +425,35 @@ export async function streamImport(filePath: string, requestId: string): Promise
           // 追踪昵称变化（仅记录，不写入数据库，最后批量处理）
           t0 = Date.now()
           const senderName = msg.senderName || msg.senderPlatformId
+          const originalNickname = memberNicknameMap.get(msg.senderPlatformId)
+
+          // 判断是否是"真实昵称"（非 platformId，非原始昵称）
+          const isRealNickname =
+            senderName !== msg.senderPlatformId && // 不是 QQ 号
+            senderName !== originalNickname // 不是 QQ 原始昵称
+
           const tracker = nicknameTracker.get(msg.senderPlatformId)
           if (!tracker) {
-            nicknameTracker.set(msg.senderPlatformId, {
-              currentName: senderName,
-              lastSeenTs: msg.timestamp,
-              history: [{ name: senderName, startTs: msg.timestamp }],
-            })
-            nicknameChangeCount++
-          } else if (tracker.currentName !== senderName) {
-            // 记录昵称变化（稍后批量写入）
+            // 首次记录：只记录真实昵称
+            if (isRealNickname) {
+              nicknameTracker.set(msg.senderPlatformId, {
+                currentName: senderName,
+                lastSeenTs: msg.timestamp,
+                history: [{ name: senderName, startTs: msg.timestamp }],
+              })
+              nicknameChangeCount++
+              // 调试日志（前 20 条）
+              if (nicknameChangeCount <= 20) {
+                console.log(`[昵称追踪] 新增: platformId=${msg.senderPlatformId}, name="${senderName}", nickname="${originalNickname}"`)
+              }
+            }
+          } else if (tracker.currentName !== senderName && isRealNickname) {
+            // 昵称变化：只记录变化到真实昵称的情况
             tracker.history.push({ name: senderName, startTs: msg.timestamp })
+            // 调试日志（前 20 条变更）
+            if (tracker.history.length <= 5) {
+              console.log(`[昵称追踪] 变更: platformId=${msg.senderPlatformId}, "${tracker.currentName}" -> "${senderName}", nickname="${originalNickname}"`)
+            }
             tracker.currentName = senderName
             tracker.lastSeenTs = msg.timestamp
             nicknameChangeCount++
@@ -477,15 +508,46 @@ export async function streamImport(filePath: string, requestId: string): Promise
     // 开始新事务
     db.exec('BEGIN TRANSACTION')
     let historyCount = 0
+    let filteredCount = 0
     for (const [platformId, tracker] of nicknameTracker.entries()) {
+      // 跳过无效的 platformId（0、空字符串等）
+      if (!platformId || platformId === '0' || platformId === 'undefined') {
+        continue
+      }
+
       const senderId = memberIdMap.get(platformId)
       if (!senderId) continue
 
-      // 写入所有昵称历史
-      for (let i = 0; i < tracker.history.length; i++) {
-        const h = tracker.history[i]
-        const endTs = i < tracker.history.length - 1 ? tracker.history[i + 1].startTs : null
-        insertNameHistory.run(senderId, h.name, h.startTs, endTs)
+      // 清理历史记录：去除重复和来回切换的记录
+      // 只保留每个唯一昵称的首次使用时间
+      const uniqueNames = new Map<string, { startTs: number; lastTs: number }>()
+      for (const h of tracker.history) {
+        const existing = uniqueNames.get(h.name)
+        if (!existing) {
+          uniqueNames.set(h.name, { startTs: h.startTs, lastTs: h.startTs })
+        } else {
+          existing.lastTs = h.startTs
+        }
+      }
+
+      // 过滤掉 platformId（QQ 号）本身
+      uniqueNames.delete(platformId)
+
+      // 如果只有一个唯一昵称，不算有变更
+      if (uniqueNames.size <= 1) {
+        filteredCount++
+        // 仍然更新成员最新昵称
+        updateMemberName.run(tracker.currentName, platformId)
+        continue
+      }
+
+      // 按首次使用时间排序，写入昵称历史
+      const sortedHistory = Array.from(uniqueNames.entries()).sort((a, b) => a[1].startTs - b[1].startTs)
+
+      for (let i = 0; i < sortedHistory.length; i++) {
+        const [name, { startTs }] = sortedHistory[i]
+        const endTs = i < sortedHistory.length - 1 ? sortedHistory[i + 1][1].startTs : null
+        insertNameHistory.run(senderId, name, startTs, endTs)
         historyCount++
       }
 
@@ -493,6 +555,7 @@ export async function streamImport(filePath: string, requestId: string): Promise
       updateMemberName.run(tracker.currentName, platformId)
     }
     db.exec('COMMIT')
+    console.log(`[StreamImport] 昵称历史：写入 ${historyCount} 条，过滤 ${filteredCount} 个无变更成员`)
     logPerf(`昵称历史写入完成 (${historyCount}条)`, totalMessageCount)
 
     // 创建索引（导入完成后批量创建，比边导入边更新快很多）
