@@ -65,7 +65,7 @@ watch(
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="mx-auto max-w-3xl space-y-6">
     <!-- 口头禅分析模块 -->
     <LoadingState v-if="isLoadingCatchphrase" text="正在分析口头禅数据..." />
 

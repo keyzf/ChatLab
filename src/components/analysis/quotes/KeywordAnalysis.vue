@@ -26,9 +26,11 @@ const props = defineProps<{
 // 使用类型断言绕过 Pinia persist 插件的类型推断问题
 const chatStore = useChatStore() as ReturnType<typeof useChatStore> & {
   customKeywordTemplates: BaseKeywordTemplate[]
+  deletedPresetTemplateIds: string[]
   addCustomKeywordTemplate: (template: BaseKeywordTemplate) => void
   updateCustomKeywordTemplate: (id: string, updates: Partial<Omit<BaseKeywordTemplate, 'id'>>) => void
   removeCustomKeywordTemplate: (id: string) => void
+  addDeletedPresetTemplateId: (id: string) => void
 }
 
 // 颜色模式：false = 单色，true = 多色
@@ -78,7 +80,7 @@ const PRESET_TEMPLATES: KeywordTemplate[] = [
   {
     id: 'laugh',
     name: '含笑量',
-    keywords: ['哈哈', 'xswl', 'lol', 'ww', '笑死', '233'],
+    keywords: ['哈哈', 'xswl', 'lol', '笑死', '233'],
     description: '统计群内的快乐指数',
   },
   {
@@ -86,6 +88,36 @@ const PRESET_TEMPLATES: KeywordTemplate[] = [
     name: '沮丧量',
     keywords: ['想死', '难受', '哭了', '崩溃', '裂开', '无语', '累了'],
     description: '统计群内的负面情绪',
+  },
+  {
+    id: 'praise',
+    name: '捧哏',
+    keywords: ['牛逼', '666', '厉害', '强', 'nb', '大佬', '羡慕', '好强'],
+    description: '统计群内最会夸人的成员',
+  },
+  {
+    id: 'slacker',
+    name: '摸鱼',
+    keywords: ['摸鱼', '下班', '饿了', '困了', '不想上班', '什么时候下班'],
+    description: '统计群内最想下班的打工人',
+  },
+  {
+    id: 'gossip',
+    name: '吃瓜',
+    keywords: ['吃瓜', '细说', '真的假的', '展开说说', '尊嘟假嘟', '卧槽', '离谱'],
+    description: '统计群内最爱吃瓜的成员',
+  },
+  {
+    id: 'polite',
+    name: '礼貌',
+    keywords: ['谢谢', '麻烦', '收到', '好的', '辛苦', '打扰', '请教'],
+    description: '统计群内最客气的成员',
+  },
+  {
+    id: 'curious',
+    name: '疑问',
+    keywords: ['为什么', '啥', '怎么', '不懂', '求教'],
+    description: '统计群内问题最多的成员',
   },
 ]
 
@@ -95,7 +127,9 @@ const allTemplates = computed<KeywordTemplate[]>(() => {
     ...t,
     isCustom: true,
   }))
-  return [...PRESET_TEMPLATES, ...custom]
+  // 过滤掉已删除的预设模板
+  const activePresets = PRESET_TEMPLATES.filter((t) => !chatStore.deletedPresetTemplateIds.includes(t.id))
+  return [...activePresets, ...custom]
 })
 
 // 当前选中的模板
@@ -103,6 +137,12 @@ const selectedTemplateId = ref<string>('laugh')
 
 // 当前关键词（可编辑）
 const currentKeywords = ref<string[]>([...PRESET_TEMPLATES[0].keywords])
+
+// 获取当前模板名称
+const currentTemplateName = computed(() => {
+  const template = allTemplates.value.find((t) => t.id === selectedTemplateId.value)
+  return template ? template.name : ''
+})
 
 // 分析结果
 const analysis = ref<LaughAnalysis | null>(null)
@@ -154,6 +194,8 @@ function removeTemplateKeyword(keyword: string) {
 function selectTemplate(template: KeywordTemplate) {
   selectedTemplateId.value = template.id
   currentKeywords.value = [...template.keywords]
+  // 切换模板时先清空数据，触发 loading 状态
+  analysis.value = null
   loadAnalysis()
 }
 
@@ -161,6 +203,7 @@ function selectTemplate(template: KeywordTemplate) {
 function clearAllKeywords() {
   currentKeywords.value = []
   analysis.value = null
+  selectedTemplateId.value = ''
 }
 
 // 当前关键词输入
@@ -227,11 +270,21 @@ function saveTemplate() {
   showTemplateModal.value = false
 }
 
-// 删除自定义模板
+// 删除模板（支持预设和自定义）
 function deleteTemplate(templateId: string) {
-  chatStore.removeCustomKeywordTemplate(templateId)
+  if (isPresetTemplate(templateId)) {
+    chatStore.addDeletedPresetTemplateId(templateId)
+  } else {
+    chatStore.removeCustomKeywordTemplate(templateId)
+  }
+
   if (selectedTemplateId.value === templateId) {
-    selectTemplate(PRESET_TEMPLATES[0])
+    // 如果删除的是当前选中的模板，尝试选中第一个可用模板，否则清空
+    if (allTemplates.value.length > 0) {
+      selectTemplate(allTemplates.value[0])
+    } else {
+      clearAllKeywords()
+    }
   }
 }
 
@@ -309,14 +362,8 @@ watch(
 <template>
   <ListPro
     :items="rankData"
-    title="🔍 关键词分析"
-    :description="
-      isLoading
-        ? '加载中...'
-        : analysis
-          ? `共检测到 ${analysis.totalLaughs} 次关键词，群整体词频率 ${analysis.groupLaughRate}%`
-          : '配置关键词后开始分析'
-    "
+    title="🔍 关键词排行"
+    description="分析群聊关键词使用排行，这里可以自定义多种榜单"
     :topN="10"
     countTemplate="共 {count} 位成员"
   >
@@ -330,21 +377,22 @@ watch(
           <UContextMenu
             v-for="template in allTemplates"
             :key="template.id"
-            :items="
-              template.isCustom
-                ? [
-                    [
-                      { label: '编辑', icon: 'i-lucide-pencil', onSelect: () => openEditModal(template) },
-                      {
-                        label: '删除',
-                        icon: 'i-lucide-trash',
-                        color: 'error' as const,
-                        onSelect: () => deleteTemplate(template.id),
-                      },
-                    ],
-                  ]
-                : [[{ label: '编辑', icon: 'i-lucide-pencil', onSelect: () => openEditModal(template) }]]
-            "
+            :items="[
+              [
+                {
+                  label: '编辑',
+                  icon: 'i-lucide-pencil',
+                  disabled: !template.isCustom,
+                  onSelect: () => openEditModal(template),
+                },
+                {
+                  label: '删除',
+                  icon: 'i-lucide-trash',
+                  color: 'error' as const,
+                  onSelect: () => deleteTemplate(template.id),
+                },
+              ],
+            ]"
           >
             <button
               class="rounded-md border px-2.5 py-1 text-sm transition-all"
@@ -373,7 +421,7 @@ watch(
                 <div class="space-y-3">
                   <div>
                     <label class="mb-1 block text-xs text-gray-500">模板名称</label>
-                    <UInput v-model="templateName" placeholder="如：正能量" size="sm" />
+                    <UInput v-model="templateName" placeholder="如：正能量" />
                   </div>
                   <div>
                     <label class="mb-1 block text-xs text-gray-500">关键词</label>
@@ -381,7 +429,6 @@ watch(
                       <UBadge
                         v-for="keyword in templateKeywords"
                         :key="keyword"
-                        color="amber"
                         variant="soft"
                         class="cursor-pointer"
                         @click="removeTemplateKeyword(keyword)"
@@ -392,7 +439,6 @@ watch(
                       <UInput
                         v-model="newTemplateKeyword"
                         placeholder="输入后回车添加"
-                        size="sm"
                         class="w-32"
                         @keydown.enter.prevent="addTemplateKeyword"
                       />
@@ -400,9 +446,8 @@ watch(
                   </div>
                 </div>
                 <div class="mt-4 flex justify-end gap-2">
-                  <UButton size="sm" color="gray" variant="soft" @click="showTemplateModal = false">取消</UButton>
+                  <UButton color="gray" variant="soft" @click="showTemplateModal = false">取消</UButton>
                   <UButton
-                    size="sm"
                     color="primary"
                     :disabled="!templateName.trim() || templateKeywords.length === 0"
                     @click="saveTemplate"
@@ -420,21 +465,13 @@ watch(
           <UBadge
             v-for="keyword in currentKeywords"
             :key="keyword"
-            variant="soft"
             class="cursor-pointer"
-            :color="getKeywordColor(keyword).badge"
             @click="removeKeyword(keyword)"
           >
             {{ keyword }}
             <span class="ml-0.5 hover:text-red-500">×</span>
           </UBadge>
-          <UInput
-            v-model="newKeyword"
-            placeholder="输入后回车添加"
-            size="sm"
-            class="w-32"
-            @keydown.enter.prevent="addKeyword"
-          />
+          <UInput v-model="newKeyword" placeholder="输入后回车添加" class="w-32" @keydown.enter.prevent="addKeyword" />
           <button
             v-if="currentKeywords.length > 0"
             class="text-xs text-gray-400 hover:text-red-500"
@@ -452,7 +489,11 @@ watch(
         class="border-b border-gray-100 px-5 py-4 dark:border-gray-800"
       >
         <div class="mb-3 flex items-center justify-between">
-          <span class="text-sm font-medium text-gray-700 dark:text-gray-300">关键词分布</span>
+          <span class="text-base font-medium text-gray-700 dark:text-gray-300">
+            {{
+              currentTemplateName ? currentTemplateName : currentKeywords.length === 1 ? currentKeywords[0] : '关键词'
+            }}排行榜
+          </span>
           <label class="flex cursor-pointer items-center gap-1.5 text-xs text-gray-500">
             <span>多色模式</span>
             <USwitch v-model="isMultiColor" size="md" />
@@ -462,7 +503,7 @@ watch(
           <div
             v-for="item in analysis.typeDistribution"
             :key="item.type"
-            class="flex items-center gap-2 rounded-lg px-3 py-1.5"
+            class="flex items-center gap-2 rounded-lg px-2 py-2 text-xs"
             :class="getKeywordColor(item.type).wrapBg"
           >
             <span class="h-2.5 w-2.5 shrink-0 rounded-full" :class="getKeywordColor(item.type).bg" />
@@ -515,6 +556,15 @@ watch(
           <span class="text-sm text-gray-500">次 ({{ member.percentage }}%)</span>
         </div>
       </div>
+    </template>
+
+    <!-- 自定义空状态 -->
+    <template #empty>
+      <div v-if="!isLoading" class="flex h-64 flex-col items-center justify-center text-gray-400">
+        <UIcon name="i-heroicons-magnifying-glass" class="mb-2 h-8 w-8 opacity-50" />
+        <p class="text-sm">暂无数据，请尝试添加关键词或切换模板</p>
+      </div>
+      <div v-else class="h-64" />
     </template>
   </ListPro>
 </template>

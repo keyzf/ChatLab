@@ -35,8 +35,8 @@ const isInitialLoad = ref(true) // 用于跳过初始加载时的 watch 触发�
 const tabs = [
   { id: 'overview', label: '总览', icon: 'i-heroicons-chart-pie' },
   { id: 'ranking', label: '群榜单', icon: 'i-heroicons-trophy' },
-  { id: 'relationships', label: '群关系', icon: 'i-heroicons-heart' },
   { id: 'quotes', label: '群语录', icon: 'i-heroicons-chat-bubble-bottom-center-text' },
+  { id: 'relationships', label: '群关系', icon: 'i-heroicons-heart' },
   { id: 'timeline', label: '群趋势', icon: 'i-heroicons-chart-bar' },
 ]
 
@@ -267,23 +267,25 @@ onMounted(() => {
         </div>
 
         <!-- Tabs -->
-        <div class="mt-4 flex items-center gap-1">
-          <button
-            v-for="tab in tabs"
-            :key="tab.id"
-            class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all"
-            :class="[
-              activeTab === tab.id
-                ? 'bg-pink-500 text-white dark:bg-pink-900/30 dark:text-pink-300'
-                : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800',
-            ]"
-            @click="activeTab = tab.id"
-          >
-            <UIcon :name="tab.icon" class="h-4 w-4" />
-            {{ tab.label }}
-          </button>
-          <!-- 年份选择器靠右 -->
-          <UITabs v-model="selectedYear" :items="yearOptions" size="sm" class="max-w-100 ml-auto" />
+        <div class="mt-4 flex items-center justify-between gap-4">
+          <div class="flex flex-shrink-0 items-center gap-1 overflow-x-auto scrollbar-hide">
+            <button
+              v-for="tab in tabs"
+              :key="tab.id"
+              class="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all"
+              :class="[
+                activeTab === tab.id
+                  ? 'bg-pink-500 text-white dark:bg-pink-900/30 dark:text-pink-300'
+                  : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800',
+              ]"
+              @click="activeTab = tab.id"
+            >
+              <UIcon :name="tab.icon" class="h-4 w-4" />
+              <span class="whitespace-nowrap">{{ tab.label }}</span>
+            </button>
+          </div>
+          <!-- 年份选择器靠右，允许收缩 -->
+          <UITabs v-model="selectedYear" :items="yearOptions" size="sm" class="min-w-0 flex-shrink" />
         </div>
       </div>
 
@@ -324,15 +326,15 @@ onMounted(() => {
               :selected-year="selectedYear"
               :available-years="availableYears"
             />
-            <RelationshipsTab
-              v-else-if="activeTab === 'relationships'"
-              :key="'relationships-' + selectedYear"
-              :session-id="currentSessionId!"
-              :time-filter="timeFilter"
-            />
             <QuotesTab
               v-else-if="activeTab === 'quotes'"
               :key="'quotes-' + selectedYear"
+              :session-id="currentSessionId!"
+              :time-filter="timeFilter"
+            />
+            <RelationshipsTab
+              v-else-if="activeTab === 'relationships'"
+              :key="'relationships-' + selectedYear"
               :session-id="currentSessionId!"
               :time-filter="timeFilter"
             />

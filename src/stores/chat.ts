@@ -248,6 +248,15 @@ export const useChatStore = defineStore(
       }
     }
 
+    // ==================== 已删除的预设模板 ====================
+    const deletedPresetTemplateIds = ref<string[]>([])
+
+    function addDeletedPresetTemplateId(id: string) {
+      if (!deletedPresetTemplateIds.value.includes(id)) {
+        deletedPresetTemplateIds.value.push(id)
+      }
+    }
+
     return {
       // State
       sessions,
@@ -257,6 +266,7 @@ export const useChatStore = defineStore(
       isInitialized,
       isSidebarCollapsed,
       customKeywordTemplates,
+      deletedPresetTemplateIds,
       // Computed
       currentSession,
       // Actions
@@ -271,6 +281,7 @@ export const useChatStore = defineStore(
       addCustomKeywordTemplate,
       updateCustomKeywordTemplate,
       removeCustomKeywordTemplate,
+      addDeletedPresetTemplateId,
     }
   },
   {
@@ -282,7 +293,7 @@ export const useChatStore = defineStore(
       },
       {
         // 自定义模板：localStorage（持久保存）
-        pick: ['customKeywordTemplates'],
+        pick: ['customKeywordTemplates', 'deletedPresetTemplateIds'],
         storage: localStorage,
       },
     ],

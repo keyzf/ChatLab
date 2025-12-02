@@ -1227,13 +1227,6 @@ export function getMentionAnalysis(sessionId: string, filter?: TimeFilter): any 
   }
 }
 
-// ==================== 含笑量分析 ====================
-
-/**
- * 默认笑声关键词列表
- */
-const DEFAULT_LAUGH_KEYWORDS = ['哈哈', 'xswl', 'lol', 'ww', '笑死', '233', '🤣']
-
 /**
  * 将关键词转换为正则表达式模式
  */
@@ -1244,12 +1237,6 @@ function keywordToPattern(keyword: string): string {
   // 特殊处理一些关键词的变体
   if (keyword === '哈哈') {
     return '哈哈+'
-  }
-  if (keyword === 'ww') {
-    return 'ww+'
-  }
-  if (keyword === '233') {
-    return '2{2,}3{1,}'
   }
 
   return escaped
@@ -1275,7 +1262,7 @@ export function getLaughAnalysis(sessionId: string, filter?: TimeFilter, keyword
   if (!db) return emptyResult
 
   // 使用传入的关键词或默认关键词
-  const laughKeywords = keywords && keywords.length > 0 ? keywords : DEFAULT_LAUGH_KEYWORDS
+  const laughKeywords = keywords && keywords.length > 0 ? keywords : []
 
   // 构建正则表达式
   const patterns = laughKeywords.map(keywordToPattern)

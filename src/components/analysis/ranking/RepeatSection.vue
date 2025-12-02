@@ -123,7 +123,7 @@ watch(
       </div>
 
       <!-- 复读排行榜 Grid -->
-      <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <div class="grid grid-cols-1 gap-6">
         <RankListPro
           v-if="originatorRankData.length > 0"
           :members="originatorRankData"

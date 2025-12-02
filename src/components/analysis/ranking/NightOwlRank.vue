@@ -144,7 +144,7 @@ watch(
         </div>
 
         <!-- 最晚下班 & 最早上班 -->
-        <div class="grid gap-6 lg:grid-cols-2">
+        <div class="grid gap-6">
           <!-- 最晚下班排名 -->
           <div>
             <RankListPro

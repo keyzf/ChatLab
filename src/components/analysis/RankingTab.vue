@@ -74,7 +74,7 @@ const memberRankData = computed<RankItem[]>(() => {
 <template>
   <div ref="contentRef" class="flex gap-6">
     <!-- 主内容区 -->
-    <div class="min-w-0 flex-1 space-y-6">
+    <div class="min-w-0 flex-1 px-8 mx-auto max-w-3xl space-y-6">
       <!-- 赛季大标题 -->
       <div class="mb-8 mt-4">
         <h1

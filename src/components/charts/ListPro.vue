@@ -76,6 +76,10 @@ const formattedCount = computed(() => props.countTemplate.replace('{count}', Str
     </div>
 
     <!-- 空状态 -->
-    <div v-if="items.length === 0" class="px-5 py-8 text-center text-sm text-gray-400">暂无数据</div>
+    <div v-if="items.length === 0">
+      <slot name="empty">
+        <div class="px-5 py-8 text-center text-sm text-gray-400">暂无数据</div>
+      </slot>
+    </div>
   </div>
 </template>
