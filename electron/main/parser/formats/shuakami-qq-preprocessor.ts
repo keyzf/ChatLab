@@ -156,10 +156,11 @@ async function preprocessQQJson(inputPath: string, onProgress?: (progress: Parse
     let chatInfo: Record<string, unknown> = { name: '未知群聊', type: 'group' }
     let metadata: Record<string, unknown> | undefined
 
-    headStream.on('data', (chunk: string) => {
+    headStream.on('data', (chunk: string | Buffer) => {
+      const str = typeof chunk === 'string' ? chunk : chunk.toString('utf-8')
       if (headSize < maxHeadSize) {
-        headChunks.push(chunk)
-        headSize += chunk.length
+        headChunks.push(str)
+        headSize += str.length
       } else {
         headStream.destroy()
       }

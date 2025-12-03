@@ -33,5 +33,5 @@ export {
 } from './advanced'
 
 // AI 查询
-export { searchMessages, getMessageContext } from './ai'
+export { searchMessages, getMessageContext, getRecentMessages } from './ai'
 

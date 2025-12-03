@@ -116,7 +116,7 @@ defineExpose({
   <div class="flex h-full w-64 flex-col">
     <!-- 头部 -->
     <div class="flex items-center justify-between px-2 py-4">
-      <span class="text-xs font-semibold tracking-wider text-gray-400 uppercase">History</span>
+      <span class="text-xs font-semibold tracking-wider text-gray-400 uppercase">AI对话记录</span>
       <UButton
         icon="i-heroicons-plus"
         color="gray"

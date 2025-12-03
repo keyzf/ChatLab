@@ -22,8 +22,12 @@ export interface LLMConfig {
  * 聊天消息
  */
 export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant'
+  role: 'system' | 'user' | 'assistant' | 'tool'
   content: string
+  /** tool 角色时的 tool_call_id */
+  tool_call_id?: string
+  /** assistant 角色时的 tool_calls */
+  tool_calls?: ToolCall[]
 }
 
 /**
@@ -33,6 +37,8 @@ export interface ChatOptions {
   temperature?: number
   maxTokens?: number
   stream?: boolean
+  /** 可用的工具列表 */
+  tools?: ToolDefinition[]
 }
 
 /**
@@ -40,7 +46,9 @@ export interface ChatOptions {
  */
 export interface ChatResponse {
   content: string
-  finishReason: 'stop' | 'length' | 'error'
+  finishReason: 'stop' | 'length' | 'error' | 'tool_calls'
+  /** 如果 LLM 决定调用工具，返回 tool_calls */
+  tool_calls?: ToolCall[]
   usage?: {
     promptTokens: number
     completionTokens: number
@@ -54,7 +62,55 @@ export interface ChatResponse {
 export interface ChatStreamChunk {
   content: string
   isFinished: boolean
-  finishReason?: 'stop' | 'length' | 'error'
+  finishReason?: 'stop' | 'length' | 'error' | 'tool_calls'
+  /** 流式过程中的 tool_calls（增量） */
+  tool_calls?: ToolCall[]
+}
+
+// ==================== Function Calling 相关类型 ====================
+
+/**
+ * 工具定义（OpenAI 兼容格式）
+ */
+export interface ToolDefinition {
+  type: 'function'
+  function: {
+    name: string
+    description: string
+    parameters: {
+      type: 'object'
+      properties: Record<
+        string,
+        {
+          type: string
+          description: string
+          enum?: string[]
+          items?: { type: string }
+        }
+      >
+      required?: string[]
+    }
+  }
+}
+
+/**
+ * 工具调用
+ */
+export interface ToolCall {
+  id: string
+  type: 'function'
+  function: {
+    name: string
+    arguments: string // JSON 字符串
+  }
+}
+
+/**
+ * 工具调用结果
+ */
+export interface ToolCallResult {
+  tool_call_id: string
+  result: unknown
 }
 
 /**
@@ -78,11 +134,15 @@ export interface ILLMService {
 
   /**
    * 发送聊天请求（非流式）
+   * @param messages 消息列表
+   * @param options 选项，可包含 tools 参数启用 Function Calling
    */
   chat(messages: ChatMessage[], options?: ChatOptions): Promise<ChatResponse>
 
   /**
    * 发送聊天请求（流式）
+   * @param messages 消息列表
+   * @param options 选项，可包含 tools 参数启用 Function Calling
    */
   chatStream(messages: ChatMessage[], options?: ChatOptions): AsyncGenerator<ChatStreamChunk>
 

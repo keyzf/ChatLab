@@ -42,7 +42,7 @@ const api = {
     }
   },
   receive: (channel: string, func: (...args: unknown[]) => void) => {
-    const validChannels = ['show-message', 'chat:importProgress', 'merge:parseProgress', 'llm:streamChunk']
+    const validChannels = ['show-message', 'chat:importProgress', 'merge:parseProgress', 'llm:streamChunk', 'agent:streamChunk', 'agent:complete']
     if (validChannels.includes(channel)) {
       // Deliberately strip event as it includes `sender`
       ipcRenderer.on(channel, (_event, ...args) => func(...args))
@@ -477,6 +477,28 @@ interface ChatStreamChunk {
   finishReason?: 'stop' | 'length' | 'error'
 }
 
+// Agent API 类型定义
+interface AgentStreamChunk {
+  type: 'content' | 'tool_start' | 'tool_result' | 'done' | 'error'
+  content?: string
+  toolName?: string
+  toolParams?: Record<string, unknown>
+  toolResult?: unknown
+  error?: string
+  isFinished?: boolean
+}
+
+interface AgentResult {
+  content: string
+  toolsUsed: string[]
+  toolRounds: number
+}
+
+interface ToolContext {
+  sessionId: string
+  timeFilter?: { startTs: number; endTs: number }
+}
+
 const llmApi = {
   /**
    * 获取所有支持的 LLM 提供商
@@ -591,6 +613,68 @@ const llmApi = {
   },
 }
 
+// Agent API - AI Agent 功能（带 Function Calling）
+const agentApi = {
+  /**
+   * 执行 Agent 对话（流式）
+   * Agent 会自动调用工具获取数据并生成回答
+   */
+  runStream: (
+    userMessage: string,
+    context: ToolContext,
+    onChunk?: (chunk: AgentStreamChunk) => void
+  ): Promise<{ success: boolean; result?: AgentResult; error?: string }> => {
+    return new Promise((resolve) => {
+      const requestId = `agent_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+      console.log('[preload] Agent runStream 开始，requestId:', requestId)
+
+      // 监听流式 chunks
+      const chunkHandler = (
+        _event: Electron.IpcRendererEvent,
+        data: { requestId: string; chunk: AgentStreamChunk }
+      ) => {
+        if (data.requestId === requestId) {
+          if (onChunk) {
+            onChunk(data.chunk)
+          }
+        }
+      }
+
+      // 监听完成事件
+      const completeHandler = (
+        _event: Electron.IpcRendererEvent,
+        data: { requestId: string; result: AgentResult }
+      ) => {
+        if (data.requestId === requestId) {
+          console.log('[preload] Agent 完成，requestId:', requestId)
+          ipcRenderer.removeListener('agent:streamChunk', chunkHandler)
+          ipcRenderer.removeListener('agent:complete', completeHandler)
+          resolve({ success: true, result: data.result })
+        }
+      }
+
+      ipcRenderer.on('agent:streamChunk', chunkHandler)
+      ipcRenderer.on('agent:complete', completeHandler)
+
+      // 发起请求
+      ipcRenderer.invoke('agent:runStream', requestId, userMessage, context).then((result) => {
+        console.log('[preload] Agent invoke 返回:', result)
+        if (!result.success) {
+          ipcRenderer.removeListener('agent:streamChunk', chunkHandler)
+          ipcRenderer.removeListener('agent:complete', completeHandler)
+          resolve(result)
+        }
+        // 如果 success，等待完成（由 completeHandler 处理 resolve）
+      }).catch((error) => {
+        console.error('[preload] Agent invoke 错误:', error)
+        ipcRenderer.removeListener('agent:streamChunk', chunkHandler)
+        ipcRenderer.removeListener('agent:complete', completeHandler)
+        resolve({ success: false, error: String(error) })
+      })
+    })
+  },
+}
+
 // 扩展 api，添加 dialog 功能
 const extendedApi = {
   ...api,
@@ -612,6 +696,7 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('mergeApi', mergeApi)
     contextBridge.exposeInMainWorld('aiApi', aiApi)
     contextBridge.exposeInMainWorld('llmApi', llmApi)
+    contextBridge.exposeInMainWorld('agentApi', agentApi)
   } catch (error) {
     console.error(error)
   }
@@ -628,4 +713,6 @@ if (process.contextIsolated) {
   window.aiApi = aiApi
   // @ts-ignore (define in dts)
   window.llmApi = llmApi
+  // @ts-ignore (define in dts)
+  window.agentApi = agentApi
 }

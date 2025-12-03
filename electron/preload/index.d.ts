@@ -187,6 +187,36 @@ interface LlmApi {
   ) => Promise<{ success: boolean; error?: string }>
 }
 
+// Agent 相关类型
+interface AgentStreamChunk {
+  type: 'content' | 'tool_start' | 'tool_result' | 'done' | 'error'
+  content?: string
+  toolName?: string
+  toolParams?: Record<string, unknown>
+  toolResult?: unknown
+  error?: string
+  isFinished?: boolean
+}
+
+interface AgentResult {
+  content: string
+  toolsUsed: string[]
+  toolRounds: number
+}
+
+interface ToolContext {
+  sessionId: string
+  timeFilter?: { startTs: number; endTs: number }
+}
+
+interface AgentApi {
+  runStream: (
+    userMessage: string,
+    context: ToolContext,
+    onChunk?: (chunk: AgentStreamChunk) => void
+  ) => Promise<{ success: boolean; result?: AgentResult; error?: string }>
+}
+
 declare global {
   interface Window {
     electron: ElectronAPI
@@ -195,7 +225,8 @@ declare global {
     mergeApi: MergeApi
     aiApi: AiApi
     llmApi: LlmApi
+    agentApi: AgentApi
   }
 }
 
-export { ChatApi, Api, MergeApi, AiApi, LlmApi, SearchMessageResult, AIConversation, AIMessage, LLMProviderInfo, LLMConfig, LLMChatMessage, LLMChatOptions, LLMChatStreamChunk }
+export { ChatApi, Api, MergeApi, AiApi, LlmApi, AgentApi, SearchMessageResult, AIConversation, AIMessage, LLMProviderInfo, LLMConfig, LLMChatMessage, LLMChatOptions, LLMChatStreamChunk, AgentStreamChunk, AgentResult, ToolContext }

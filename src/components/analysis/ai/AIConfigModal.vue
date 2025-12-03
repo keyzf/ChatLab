@@ -27,7 +27,7 @@ const providers = ref<Array<{
 const selectedProvider = ref('')
 const apiKey = ref('')
 const selectedModel = ref('')
-const maxTokens = ref(50)
+const maxTokens = ref(200)
 
 // 当前配置状态
 const hasExistingConfig = ref(false)
@@ -52,9 +52,9 @@ const modelOptions = computed(() => {
   }))
 })
 
-// 是否可以保存
+// 是否可以保存（有提供商，且有新 API Key 或已有配置）
 const canSave = computed(() => {
-  return selectedProvider.value && apiKey.value && validationResult.value === 'valid'
+  return selectedProvider.value && (apiKey.value.trim().length > 0 || hasExistingConfig.value)
 })
 
 // 加载提供商列表
@@ -81,7 +81,7 @@ async function loadCurrentConfig() {
       existingConfigDisplay.value = config.apiKey
       selectedProvider.value = config.provider
       selectedModel.value = config.model || ''
-      maxTokens.value = config.maxTokens || 50
+      maxTokens.value = config.maxTokens || 200
     }
   } catch (error) {
     console.error('加载当前配置失败：', error)
@@ -293,8 +293,8 @@ onMounted(() => {
             <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
               发送条数限制
             </label>
-            <UInput v-model.number="maxTokens" type="number" min="10" max="200" />
-            <p class="mt-1 text-xs text-gray-500">每次发送给 AI 的最大消息条数（10-200）</p>
+            <UInput v-model.number="maxTokens" type="number" min="10" max="5000" />
+            <p class="mt-1 text-xs text-gray-500">每次发送给 AI 的最大消息条数（10-5000，默认 200）</p>
           </div>
 
           <!-- 获取 API Key 链接 -->

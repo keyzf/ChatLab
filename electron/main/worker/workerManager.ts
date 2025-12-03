@@ -385,3 +385,14 @@ export async function getMessageContext(
 ): Promise<SearchMessageResult[]> {
   return sendToWorker('getMessageContext', { sessionId, messageId, contextSize })
 }
+
+/**
+ * 获取最近消息（用于概览性问题）
+ */
+export async function getRecentMessages(
+  sessionId: string,
+  filter?: any,
+  limit?: number
+): Promise<{ messages: SearchMessageResult[]; total: number }> {
+  return sendToWorker('getRecentMessages', { sessionId, filter, limit })
+}

@@ -1,6 +1,6 @@
 /**
  * AI 查询模块
- * 提供关键词搜索功能（在 Worker 线程中执行）
+ * 提供关键词搜索和最近消息获取功能（在 Worker 线程中执行）
  */
 
 import { openDatabase, buildTimeFilter, type TimeFilter } from '../core'
@@ -17,6 +17,63 @@ export interface SearchMessageResult {
   content: string
   timestamp: number
   type: number
+}
+
+/**
+ * 获取最近的消息（用于概览性问题）
+ * @param sessionId 会话 ID
+ * @param filter 时间过滤器
+ * @param limit 返回数量限制
+ */
+export function getRecentMessages(
+  sessionId: string,
+  filter?: TimeFilter,
+  limit: number = 100
+): { messages: SearchMessageResult[]; total: number } {
+  const db = openDatabase(sessionId)
+  if (!db) return { messages: [], total: 0 }
+
+  // 构建时间过滤条件
+  const { clause: timeClause, params: timeParams } = buildTimeFilter(filter)
+  const timeCondition = timeClause ? timeClause.replace('WHERE', 'AND') : ''
+
+  // 排除系统消息，只获取文本消息（type=0）
+  const systemFilter = "AND m.name != '系统消息' AND msg.type = 0 AND msg.content IS NOT NULL AND msg.content != ''"
+
+  // 查询总数
+  const countSql = `
+    SELECT COUNT(*) as total
+    FROM message msg
+    JOIN member m ON msg.sender_id = m.id
+    WHERE 1=1
+    ${timeCondition}
+    ${systemFilter}
+  `
+  const totalRow = db.prepare(countSql).get(...timeParams) as { total: number }
+  const total = totalRow?.total || 0
+
+  // 查询最近消息（按时间降序）
+  const sql = `
+    SELECT
+      msg.id,
+      m.name as senderName,
+      m.platform_id as senderPlatformId,
+      msg.content,
+      msg.ts as timestamp,
+      msg.type
+    FROM message msg
+    JOIN member m ON msg.sender_id = m.id
+    WHERE 1=1
+    ${timeCondition}
+    ${systemFilter}
+    ORDER BY msg.ts DESC
+    LIMIT ?
+  `
+
+  const rows = db.prepare(sql).all(...timeParams, limit) as SearchMessageResult[]
+
+  // 返回时按时间正序排列（便于阅读）
+  return { messages: rows.reverse(), total }
 }
 
 /**

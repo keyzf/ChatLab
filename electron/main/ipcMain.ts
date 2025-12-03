@@ -19,6 +19,9 @@ import * as aiConversations from './ai/conversations'
 import * as llm from './ai/llm'
 // 导入 AI 日志模块
 import { aiLogger } from './ai/logger'
+// 导入 AI Agent 模块
+import { Agent, type AgentStreamChunk } from './ai/agent'
+import type { ToolContext } from './ai/tools/types'
 import type { MergeParams } from '../../src/types/chat'
 
 console.log('[IpcMain] Database, Worker and Parser modules imported')
@@ -893,10 +896,25 @@ const mainIpcMain = (win: BrowserWindow) => {
 
   /**
    * 保存 LLM 配置
+   * 如果 apiKey 为空但已有配置，保留原有的 apiKey
    */
   ipcMain.handle('llm:saveConfig', async (_, config: { provider: llm.LLMProvider; apiKey: string; model?: string; maxTokens?: number }) => {
     try {
-      llm.saveLLMConfig(config)
+      // 如果没有提供新的 API Key，保留原有的
+      let apiKeyToSave = config.apiKey
+      if (!apiKeyToSave || apiKeyToSave.trim() === '') {
+        const existingConfig = llm.loadLLMConfig()
+        if (existingConfig?.apiKey) {
+          apiKeyToSave = existingConfig.apiKey
+        } else {
+          return { success: false, error: '请输入 API Key' }
+        }
+      }
+
+      llm.saveLLMConfig({
+        ...config,
+        apiKey: apiKeyToSave,
+      })
       return { success: true }
     } catch (error) {
       console.error('保存 LLM 配置失败：', error)
@@ -1006,6 +1024,72 @@ const mainIpcMain = (win: BrowserWindow) => {
       return { success: false, error: String(error) }
     }
   })
+
+  // ==================== AI Agent API ====================
+
+  /**
+   * 执行 Agent 对话（流式）
+   * Agent 会自动调用工具并返回最终结果
+   */
+  ipcMain.handle(
+    'agent:runStream',
+    async (
+      _,
+      requestId: string,
+      userMessage: string,
+      context: ToolContext
+    ) => {
+      aiLogger.info('IPC', `收到 Agent 流式请求: ${requestId}`, {
+        userMessage: userMessage.slice(0, 100),
+        sessionId: context.sessionId,
+      })
+
+      try {
+        const agent = new Agent(context)
+
+        // 异步执行，通过事件发送流式数据
+        ;(async () => {
+          try {
+            const result = await agent.executeStream(userMessage, (chunk: AgentStreamChunk) => {
+              aiLogger.debug('IPC', `Agent chunk: ${requestId}`, {
+                type: chunk.type,
+                contentLength: chunk.content?.length,
+                toolName: chunk.toolName,
+              })
+              win.webContents.send('agent:streamChunk', { requestId, chunk })
+            })
+
+            // 发送完成信息
+            win.webContents.send('agent:complete', {
+              requestId,
+              result: {
+                content: result.content,
+                toolsUsed: result.toolsUsed,
+                toolRounds: result.toolRounds,
+              },
+            })
+
+            aiLogger.info('IPC', `Agent 执行完成: ${requestId}`, {
+              toolsUsed: result.toolsUsed,
+              toolRounds: result.toolRounds,
+              contentLength: result.content.length,
+            })
+          } catch (error) {
+            aiLogger.error('IPC', `Agent 执行出错: ${requestId}`, { error: String(error) })
+            win.webContents.send('agent:streamChunk', {
+              requestId,
+              chunk: { type: 'error', error: String(error), isFinished: true },
+            })
+          }
+        })()
+
+        return { success: true }
+      } catch (error) {
+        aiLogger.error('IPC', `创建 Agent 请求失败: ${requestId}`, { error: String(error) })
+        return { success: false, error: String(error) }
+      }
+    }
+  )
 }
 
 export default mainIpcMain
