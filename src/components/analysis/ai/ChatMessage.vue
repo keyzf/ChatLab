@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import dayjs from 'dayjs'
 import MarkdownIt from 'markdown-it'
 import userAvatar from '@/assets/images/momo.png'
+import type { ContentBlock } from '@/composables/useAIChat'
 
 // Props
 const props = defineProps<{
@@ -10,6 +11,8 @@ const props = defineProps<{
   content: string
   timestamp: number
   isStreaming?: boolean
+  /** AI 消息的混合内容块（按时序排列的文本和工具调用） */
+  contentBlocks?: ContentBlock[]
 }>()
 
 // 格式化时间
@@ -28,11 +31,69 @@ const md = new MarkdownIt({
   typographer: true, // 启用排版优化
 })
 
-// 渲染后的 HTML
+// 渲染 Markdown 文本
+function renderMarkdown(text: string): string {
+  if (!text) return ''
+  return md.render(text)
+}
+
+// 渲染后的 HTML（用于用户消息或纯文本 AI 消息）
 const renderedContent = computed(() => {
   if (!props.content) return ''
   return md.render(props.content)
 })
+
+// 是否使用 contentBlocks 渲染（AI 消息且有 contentBlocks）
+const useBlocksRendering = computed(() => {
+  return props.role === 'assistant' && props.contentBlocks && props.contentBlocks.length > 0
+})
+
+// 格式化工具参数显示
+function formatToolParams(tool: ContentBlock extends { type: 'tool'; tool: infer T } ? T : never): string {
+  if (!tool.params) return ''
+
+  const name = tool.name
+  const params = tool.params
+
+  if (name === 'search_messages' && params.keywords) {
+    const keywords = params.keywords as string[]
+    let result = `关键词: ${keywords.join(', ')}`
+    if (params.year) {
+      result += ` | 时间: ${params.year}年${params.month ? `${params.month}月` : ''}`
+    }
+    return result
+  }
+
+  if (name === 'get_recent_messages') {
+    let result = `获取 ${params.limit || 100} 条消息`
+    if (params.year) {
+      result += ` | ${params.year}年${params.month ? `${params.month}月` : ''}`
+    }
+    return result
+  }
+
+  if (name === 'get_member_stats') {
+    return `前 ${params.top_n || 10} 名成员`
+  }
+
+  if (name === 'get_time_stats') {
+    const typeMap: Record<string, string> = {
+      hourly: '按小时',
+      weekday: '按星期',
+      daily: '按日期',
+    }
+    return typeMap[params.type as string] || String(params.type)
+  }
+
+  if (name === 'get_group_members') {
+    if (params.search) {
+      return `搜索: ${params.search}`
+    }
+    return '获取成员列表'
+  }
+
+  return ''
+}
 </script>
 
 <template>
@@ -43,31 +104,96 @@ const renderedContent = computed(() => {
     </div>
     <div
       v-else
-      class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 to-pink-600"
+      class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-pink-500 to-pink-600"
     >
       <UIcon name="i-heroicons-sparkles" class="h-4 w-4 text-white" />
     </div>
 
     <!-- 消息内容 -->
     <div class="max-w-[80%] min-w-0">
-      <div
-        class="rounded-2xl px-4 py-3"
-        :class="[
-          isUser
-            ? 'rounded-tr-sm bg-blue-500 text-white'
-            : 'rounded-tl-sm bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100',
-        ]"
-      >
-        <!-- 消息内容 -->
-        <div
-          class="prose prose-sm max-w-none leading-relaxed"
-          :class="[isUser ? 'prose-invert' : 'dark:prose-invert']"
-          v-html="renderedContent"
-        />
+      <!-- 用户消息：简单气泡 -->
+      <template v-if="isUser">
+        <div class="rounded-2xl rounded-tr-sm bg-blue-500 px-4 py-3 text-white">
+          <div class="prose prose-sm prose-invert max-w-none leading-relaxed" v-html="renderedContent" />
+        </div>
+      </template>
 
-        <!-- 流式输出光标 -->
-        <span v-if="isStreaming" class="ml-1 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-pink-500" />
-      </div>
+      <!-- AI 消息：混合内容块布局 -->
+      <template v-else-if="useBlocksRendering">
+        <div class="space-y-3">
+          <template v-for="(block, idx) in contentBlocks" :key="idx">
+            <!-- 文本块 -->
+            <div
+              v-if="block.type === 'text'"
+              class="rounded-2xl rounded-tl-sm bg-gray-100 px-4 py-3 text-gray-900 dark:bg-gray-800 dark:text-gray-100"
+            >
+              <div
+                class="prose prose-sm dark:prose-invert max-w-none leading-relaxed"
+                v-html="renderMarkdown(block.text)"
+              />
+              <!-- 流式输出光标（只在最后一个文本块显示） -->
+              <span
+                v-if="isStreaming && idx === contentBlocks!.length - 1"
+                class="ml-1 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-pink-500"
+              />
+            </div>
+
+            <!-- 工具块 -->
+            <div
+              v-else-if="block.type === 'tool'"
+              class="flex items-center gap-2 rounded-lg border px-3 py-2 text-sm"
+              :class="[
+                block.tool.status === 'running'
+                  ? 'border-pink-200 bg-pink-50 dark:border-pink-800/50 dark:bg-pink-900/20'
+                  : block.tool.status === 'done'
+                    ? 'border-green-200 bg-green-50 dark:border-green-800/50 dark:bg-green-900/20'
+                    : 'border-red-200 bg-red-50 dark:border-red-800/50 dark:bg-red-900/20',
+              ]"
+            >
+              <!-- 状态图标 -->
+              <UIcon
+                :name="
+                  block.tool.status === 'running'
+                    ? 'i-heroicons-arrow-path'
+                    : block.tool.status === 'done'
+                      ? 'i-heroicons-check-circle'
+                      : 'i-heroicons-x-circle'
+                "
+                class="h-4 w-4 shrink-0"
+                :class="[
+                  block.tool.status === 'running'
+                    ? 'animate-spin text-pink-500'
+                    : block.tool.status === 'done'
+                      ? 'text-green-500'
+                      : 'text-red-500',
+                ]"
+              />
+              <!-- 工具信息 -->
+              <div class="min-w-0 flex-1">
+                <!-- 调用前缀 -->
+                <span class="text-xs text-gray-400 dark:text-gray-500 mr-1">调用</span>
+                <span class="font-medium text-gray-700 dark:text-gray-300">
+                  {{ block.tool.displayName }}
+                </span>
+                <span
+                  v-if="formatToolParams(block.tool)"
+                  class="ml-2 text-xs text-gray-500 dark:text-gray-400"
+                >
+                  {{ formatToolParams(block.tool) }}
+                </span>
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      <!-- AI 消息：传统纯文本渲染（向后兼容） -->
+      <template v-else>
+        <div class="rounded-2xl rounded-tl-sm bg-gray-100 px-4 py-3 text-gray-900 dark:bg-gray-800 dark:text-gray-100">
+          <div class="prose prose-sm dark:prose-invert max-w-none leading-relaxed" v-html="renderedContent" />
+          <span v-if="isStreaming" class="ml-1 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-pink-500" />
+        </div>
+      </template>
 
       <!-- 时间戳 -->
       <div class="mt-1 px-1" :class="[isUser ? 'text-right' : '']">

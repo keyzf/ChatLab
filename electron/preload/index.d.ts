@@ -104,6 +104,19 @@ interface AIConversation {
   updatedAt: number
 }
 
+// 内容块类型（用于 AI 消息的混合渲染）
+type AIContentBlock =
+  | { type: 'text'; text: string }
+  | {
+      type: 'tool'
+      tool: {
+        name: string
+        displayName: string
+        status: 'running' | 'done' | 'error'
+        params?: Record<string, unknown>
+      }
+    }
+
 interface AIMessage {
   id: string
   conversationId: string
@@ -112,6 +125,7 @@ interface AIMessage {
   timestamp: number
   dataKeywords?: string[]
   dataMessageCount?: number
+  contentBlocks?: AIContentBlock[]
 }
 
 interface AiApi {
@@ -133,7 +147,8 @@ interface AiApi {
     role: 'user' | 'assistant',
     content: string,
     dataKeywords?: string[],
-    dataMessageCount?: number
+    dataMessageCount?: number,
+    contentBlocks?: AIContentBlock[]
   ) => Promise<AIMessage>
   getMessages: (conversationId: string) => Promise<AIMessage[]>
   deleteMessage: (messageId: string) => Promise<boolean>

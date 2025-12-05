@@ -17,6 +17,19 @@ export interface ToolCallRecord {
   params?: Record<string, unknown>
 }
 
+// 内容块类型（用于 AI 消息的流式混合渲染）
+export type ContentBlock =
+  | { type: 'text'; text: string }
+  | {
+      type: 'tool'
+      tool: {
+        name: string
+        displayName: string
+        status: 'running' | 'done' | 'error'
+        params?: Record<string, unknown>
+      }
+    }
+
 // 消息类型
 export interface ChatMessage {
   id: string
@@ -27,8 +40,10 @@ export interface ChatMessage {
     toolsUsed: string[]
     toolRounds: number
   }
-  /** 工具调用记录（用户消息后显示） */
+  /** @deprecated 使用 contentBlocks 替代 */
   toolCalls?: ToolCallRecord[]
+  /** AI 消息的内容块数组（按时序排列的文本和工具调用） */
+  contentBlocks?: ContentBlock[]
   isStreaming?: boolean
 }
 
@@ -151,7 +166,7 @@ export function useAIChat(
     const thisRequestId = currentRequestId
     console.log('[AI] 开始 Agent 处理...', { requestId: thisRequestId })
 
-    // 创建 AI 响应消息占位符
+    // 创建 AI 响应消息占位符（使用 contentBlocks 数组）
     const aiMessageId = generateId('ai')
     const aiMessage: ChatMessage = {
       id: aiMessageId,
@@ -159,9 +174,66 @@ export function useAIChat(
       content: '',
       timestamp: Date.now(),
       isStreaming: true,
+      contentBlocks: [], // 初始化内容块数组
     }
     messages.value.push(aiMessage)
     const aiMessageIndex = messages.value.length - 1
+
+    // 辅助函数：更新 AI 消息
+    const updateAIMessage = (updates: Partial<ChatMessage>) => {
+      messages.value[aiMessageIndex] = {
+        ...messages.value[aiMessageIndex],
+        ...updates,
+      }
+    }
+
+    // 辅助函数：获取或创建当前文本块
+    const appendTextToBlocks = (text: string) => {
+      const blocks = messages.value[aiMessageIndex].contentBlocks || []
+      const lastBlock = blocks[blocks.length - 1]
+
+      if (lastBlock && lastBlock.type === 'text') {
+        // 追加到现有文本块
+        lastBlock.text += text
+      } else {
+        // 创建新文本块
+        blocks.push({ type: 'text', text })
+      }
+
+      updateAIMessage({
+        contentBlocks: [...blocks],
+        content: messages.value[aiMessageIndex].content + text, // 同时更新 content 用于向后兼容和数据库存储
+      })
+    }
+
+    // 辅助函数：添加工具块
+    const addToolBlock = (toolName: string, params?: Record<string, unknown>) => {
+      const blocks = messages.value[aiMessageIndex].contentBlocks || []
+      blocks.push({
+        type: 'tool',
+        tool: {
+          name: toolName,
+          displayName: TOOL_DISPLAY_NAMES[toolName] || toolName,
+          status: 'running',
+          params,
+        },
+      })
+      updateAIMessage({ contentBlocks: [...blocks] })
+    }
+
+    // 辅助函数：更新工具块状态
+    const updateToolBlockStatus = (toolName: string, status: 'done' | 'error') => {
+      const blocks = messages.value[aiMessageIndex].contentBlocks || []
+      // 找到最后一个匹配的 running 状态的工具块
+      for (let i = blocks.length - 1; i >= 0; i--) {
+        const block = blocks[i]
+        if (block.type === 'tool' && block.tool.name === toolName && block.tool.status === 'running') {
+          block.tool.status = status
+          break
+        }
+      }
+      updateAIMessage({ contentBlocks: [...blocks] })
+    }
 
     try {
       // 调用 Agent API
@@ -202,28 +274,18 @@ export function useAIChat(
 
         switch (chunk.type) {
           case 'content':
-            // 流式内容更新
+            // 流式内容更新 - 追加到 contentBlocks
             if (chunk.content) {
-              // 清除工具状态，开始显示内容
               currentToolStatus.value = null
-              messages.value[aiMessageIndex] = {
-                ...messages.value[aiMessageIndex],
-                content: messages.value[aiMessageIndex].content + chunk.content,
-              }
+              appendTextToBlocks(chunk.content)
             }
             break
 
           case 'tool_start':
-            // 工具开始执行 - 更新状态并记录到用户消息（包含参数）
+            // 工具开始执行 - 添加工具块到 contentBlocks
             console.log('[AI] 工具开始执行:', chunk.toolName, chunk.toolParams)
             if (chunk.toolName) {
-              const toolRecord: ToolCallRecord = {
-                name: chunk.toolName,
-                displayName: TOOL_DISPLAY_NAMES[chunk.toolName] || chunk.toolName,
-                status: 'running',
-                timestamp: Date.now(),
-                params: chunk.toolParams as Record<string, unknown>,
-              }
+              const toolParams = chunk.toolParams as Record<string, unknown> | undefined
               currentToolStatus.value = {
                 name: chunk.toolName,
                 displayName: TOOL_DISPLAY_NAMES[chunk.toolName] || chunk.toolName,
@@ -231,43 +293,23 @@ export function useAIChat(
               }
               toolsUsedInCurrentRound.value.push(chunk.toolName)
 
-              // 更新用户消息的工具调用记录
-              const userMsg = messages.value[userMessageIndex]
-              if (userMsg.toolCalls) {
-                userMsg.toolCalls = [...userMsg.toolCalls, toolRecord]
-              } else {
-                userMsg.toolCalls = [toolRecord]
-              }
-              messages.value[userMessageIndex] = { ...userMsg }
+              // 添加工具块到 AI 消息的 contentBlocks
+              addToolBlock(chunk.toolName, toolParams)
             }
             break
 
           case 'tool_result':
-            // 工具执行结果 - 更新工具状态为完成
+            // 工具执行结果 - 更新工具块状态
             console.log('[AI] 工具执行结果:', chunk.toolName, chunk.toolResult)
             if (chunk.toolName) {
-              // 更新 currentToolStatus
               if (currentToolStatus.value?.name === chunk.toolName) {
                 currentToolStatus.value = {
                   ...currentToolStatus.value,
                   status: 'done',
                 }
               }
-
-              // 更新用户消息中的工具调用状态
-              const userMsg = messages.value[userMessageIndex]
-              if (userMsg.toolCalls) {
-                const toolIndex = userMsg.toolCalls.findIndex(
-                  (t) => t.name === chunk.toolName && t.status === 'running'
-                )
-                if (toolIndex >= 0) {
-                  userMsg.toolCalls[toolIndex] = {
-                    ...userMsg.toolCalls[toolIndex],
-                    status: 'done',
-                  }
-                  messages.value[userMessageIndex] = { ...userMsg }
-                }
-              }
+              // 更新 contentBlocks 中的工具块状态
+              updateToolBlockStatus(chunk.toolName, 'done')
             }
             isLoadingSource.value = false
             break
@@ -286,6 +328,8 @@ export function useAIChat(
                 ...currentToolStatus.value,
                 status: 'error',
               }
+              // 更新对应工具块状态为错误
+              updateToolBlockStatus(currentToolStatus.value.name, 'error')
             }
             break
         }
@@ -372,13 +416,23 @@ export function useAIChat(
       // 保存用户消息
       await window.aiApi.addMessage(currentConversationId.value, 'user', userMsg.content)
 
-      // 保存 AI 消息
+      // 保存 AI 消息（包含 contentBlocks）
+      // 注意：需要深拷贝 contentBlocks 以确保可序列化（避免 Vue 响应式代理对象）
+      const serializableContentBlocks = aiMsg.contentBlocks
+        ? JSON.parse(JSON.stringify(aiMsg.contentBlocks))
+        : undefined
+      console.log('[AI] 保存 AI 消息:', {
+        contentLength: aiMsg.content?.length,
+        hasContentBlocks: !!serializableContentBlocks,
+        contentBlocksLength: serializableContentBlocks?.length,
+      })
       await window.aiApi.addMessage(
         currentConversationId.value,
         'assistant',
         aiMsg.content,
         undefined, // 不再保存关键词
-        undefined
+        undefined,
+        serializableContentBlocks // 保存内容块（已序列化）
       )
       console.log('[AI] 消息保存完成')
     } catch (error) {
@@ -395,11 +449,21 @@ export function useAIChat(
       const history = await window.aiApi.getMessages(conversationId)
       currentConversationId.value = conversationId
 
+      console.log('[AI] 从数据库加载的原始消息:', history.map((m) => ({
+        id: m.id,
+        role: m.role,
+        contentLength: m.content?.length,
+        hasContentBlocks: !!m.contentBlocks,
+        contentBlocksLength: m.contentBlocks?.length,
+      })))
+
       messages.value = history.map((msg) => ({
         id: msg.id,
         role: msg.role,
         content: msg.content,
         timestamp: msg.timestamp * 1000,
+        // 加载保存的 contentBlocks（如果有）
+        contentBlocks: msg.contentBlocks as ContentBlock[] | undefined,
       }))
       console.log('[AI] 加载完成，messages.value 数量:', messages.value.length)
     } catch (error) {

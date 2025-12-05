@@ -381,6 +381,19 @@ interface AIConversation {
   updatedAt: number
 }
 
+// 内容块类型（用于 AI 消息的混合渲染）
+type ContentBlock =
+  | { type: 'text'; text: string }
+  | {
+      type: 'tool'
+      tool: {
+        name: string
+        displayName: string
+        status: 'running' | 'done' | 'error'
+        params?: Record<string, unknown>
+      }
+    }
+
 interface AIMessage {
   id: string
   conversationId: string
@@ -389,6 +402,7 @@ interface AIMessage {
   timestamp: number
   dataKeywords?: string[]
   dataMessageCount?: number
+  contentBlocks?: ContentBlock[]
 }
 
 const aiApi = {
@@ -455,9 +469,10 @@ const aiApi = {
     role: 'user' | 'assistant',
     content: string,
     dataKeywords?: string[],
-    dataMessageCount?: number
+    dataMessageCount?: number,
+    contentBlocks?: ContentBlock[]
   ): Promise<AIMessage> => {
-    return ipcRenderer.invoke('ai:addMessage', conversationId, role, content, dataKeywords, dataMessageCount)
+    return ipcRenderer.invoke('ai:addMessage', conversationId, role, content, dataKeywords, dataMessageCount, contentBlocks)
   },
 
   /**

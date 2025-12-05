@@ -69,6 +69,7 @@ function getAiDb(): Database.Database {
       timestamp INTEGER NOT NULL,
       data_keywords TEXT,
       data_message_count INTEGER,
+      content_blocks TEXT,
       FOREIGN KEY(conversation_id) REFERENCES ai_conversation(id) ON DELETE CASCADE
     );
 
@@ -104,6 +105,21 @@ export interface AIConversation {
 }
 
 /**
+ * 内容块类型（用于 AI 消息的混合渲染）
+ */
+export type ContentBlock =
+  | { type: 'text'; text: string }
+  | {
+      type: 'tool'
+      tool: {
+        name: string
+        displayName: string
+        status: 'running' | 'done' | 'error'
+        params?: Record<string, unknown>
+      }
+    }
+
+/**
  * AI 消息类型
  */
 export interface AIMessage {
@@ -114,6 +130,8 @@ export interface AIMessage {
   timestamp: number
   dataKeywords?: string[]
   dataMessageCount?: number
+  /** AI 消息的内容块数组（按时序排列的文本和工具调用） */
+  contentBlocks?: ContentBlock[]
 }
 
 // ==================== 对话管理 ====================
@@ -211,15 +229,16 @@ export function addMessage(
   role: 'user' | 'assistant',
   content: string,
   dataKeywords?: string[],
-  dataMessageCount?: number
+  dataMessageCount?: number,
+  contentBlocks?: ContentBlock[]
 ): AIMessage {
   const db = getAiDb()
   const now = Math.floor(Date.now() / 1000)
   const id = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 
   db.prepare(`
-    INSERT INTO ai_message (id, conversation_id, role, content, timestamp, data_keywords, data_message_count)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO ai_message (id, conversation_id, role, content, timestamp, data_keywords, data_message_count, content_blocks)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     conversationId,
@@ -227,7 +246,8 @@ export function addMessage(
     content,
     now,
     dataKeywords ? JSON.stringify(dataKeywords) : null,
-    dataMessageCount ?? null
+    dataMessageCount ?? null,
+    contentBlocks ? JSON.stringify(contentBlocks) : null
   )
 
   // 更新对话的 updated_at
@@ -241,6 +261,7 @@ export function addMessage(
     timestamp: now,
     dataKeywords,
     dataMessageCount,
+    contentBlocks,
   }
 }
 
@@ -258,7 +279,8 @@ export function getMessages(conversationId: string): AIMessage[] {
       content,
       timestamp,
       data_keywords as dataKeywords,
-      data_message_count as dataMessageCount
+      data_message_count as dataMessageCount,
+      content_blocks as contentBlocks
     FROM ai_message
     WHERE conversation_id = ?
     ORDER BY timestamp ASC
@@ -270,6 +292,7 @@ export function getMessages(conversationId: string): AIMessage[] {
     timestamp: number
     dataKeywords: string | null
     dataMessageCount: number | null
+    contentBlocks: string | null
   }>
 
   return rows.map((row) => ({
@@ -280,6 +303,7 @@ export function getMessages(conversationId: string): AIMessage[] {
     timestamp: row.timestamp,
     dataKeywords: row.dataKeywords ? JSON.parse(row.dataKeywords) : undefined,
     dataMessageCount: row.dataMessageCount ?? undefined,
+    contentBlocks: row.contentBlocks ? JSON.parse(row.contentBlocks) : undefined,
   }))
 }
 

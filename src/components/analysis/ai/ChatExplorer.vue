@@ -243,134 +243,15 @@ watch(
         <div ref="messagesContainer" class="min-h-0 flex-1 overflow-y-auto p-4">
           <div class="mx-auto max-w-3xl space-y-4">
             <template v-for="msg in messages" :key="msg.id">
-              <!-- 聊天消息 -->
+              <!-- 聊天消息（支持 contentBlocks 混合渲染） -->
               <ChatMessage
-                v-if="msg.role === 'user' || msg.content"
+                v-if="msg.role === 'user' || msg.content || (msg.contentBlocks && msg.contentBlocks.length > 0)"
                 :role="msg.role"
                 :content="msg.content"
                 :timestamp="msg.timestamp"
                 :is-streaming="msg.isStreaming"
+                :content-blocks="msg.contentBlocks"
               />
-
-              <!-- 工具调用链（显示在用户消息后面） -->
-              <div
-                v-if="msg.role === 'user' && msg.toolCalls && msg.toolCalls.length > 0"
-                class="ml-11 space-y-2 rounded-lg border border-gray-200 bg-gray-50/80 px-3 py-2 dark:border-gray-700 dark:bg-gray-800/50"
-              >
-                <!-- 工具链标题 -->
-                <div class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-                  <UIcon name="i-heroicons-wrench-screwdriver" class="h-3.5 w-3.5" />
-                  <span>工具调用</span>
-                </div>
-                <!-- 工具列表 -->
-                <div class="space-y-1.5">
-                  <div v-for="(tool, idx) in msg.toolCalls" :key="tool.name + idx" class="flex items-start gap-2">
-                    <!-- 状态图标 -->
-                    <UIcon
-                      :name="
-                        tool.status === 'running'
-                          ? 'i-heroicons-arrow-path'
-                          : tool.status === 'done'
-                            ? 'i-heroicons-check-circle'
-                            : 'i-heroicons-x-circle'
-                      "
-                      class="mt-0.5 h-4 w-4 shrink-0"
-                      :class="[
-                        tool.status === 'running'
-                          ? 'animate-spin text-pink-500'
-                          : tool.status === 'done'
-                            ? 'text-green-500'
-                            : 'text-red-500',
-                      ]"
-                    />
-                    <div class="min-w-0 flex-1">
-                      <!-- 工具名称 -->
-                      <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
-                        {{ tool.displayName }}
-                      </span>
-                      <!-- 参数详情 -->
-                      <div v-if="tool.params" class="mt-0.5 space-y-0.5 text-xs text-gray-500 dark:text-gray-400">
-                        <template v-if="tool.name === 'search_messages' && tool.params.keywords">
-                          <div>
-                            <span class="text-gray-400">关键词:</span>
-                            <span
-                              v-for="(kw, kwIdx) in tool.params.keywords as string[]"
-                              :key="kwIdx"
-                              class="ml-1 inline-flex rounded bg-pink-100 px-1.5 py-0.5 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300"
-                            >
-                              {{ kw }}
-                            </span>
-                          </div>
-                          <!-- 时间范围（LLM 指定的年/月） -->
-                          <div v-if="tool.params.year" class="text-gray-400">
-                            <span>时间范围:</span>
-                            <span class="ml-1 text-gray-600 dark:text-gray-300">
-                              {{ tool.params.year }}年{{ tool.params.month ? `${tool.params.month}月` : '' }}
-                            </span>
-                          </div>
-                          <!-- 时间范围（用户筛选） -->
-                          <div v-else-if="tool.params._timeFilter" class="text-gray-400">
-                            <span>时间范围:</span>
-                            <span class="ml-1 text-gray-600 dark:text-gray-300">
-                              {{ formatTimestamp((tool.params._timeFilter as { startTs: number }).startTs) }}
-                            </span>
-                            <span class="mx-1">至</span>
-                            <span class="text-gray-600 dark:text-gray-300">
-                              {{ formatTimestamp((tool.params._timeFilter as { endTs: number }).endTs) }}
-                            </span>
-                          </div>
-                          <div v-else class="text-gray-400">
-                            <span>时间范围:</span>
-                            <span class="ml-1 text-gray-600 dark:text-gray-300">全部时间</span>
-                          </div>
-                        </template>
-                        <template v-else-if="tool.name === 'get_recent_messages'">
-                          <div>
-                            <span class="text-gray-400">获取</span>
-                            <span class="ml-1 text-gray-600 dark:text-gray-300">{{ tool.params.limit || 100 }}</span>
-                            <span class="text-gray-400">条消息</span>
-                          </div>
-                          <!-- 时间范围（LLM 指定的年/月） -->
-                          <div v-if="tool.params.year" class="text-gray-400">
-                            <span>时间范围:</span>
-                            <span class="ml-1 text-gray-600 dark:text-gray-300">
-                              {{ tool.params.year }}年{{ tool.params.month ? `${tool.params.month}月` : '' }}
-                            </span>
-                          </div>
-                          <!-- 时间范围（用户筛选） -->
-                          <div v-else-if="tool.params._timeFilter" class="text-gray-400">
-                            <span>时间范围:</span>
-                            <span class="ml-1 text-gray-600 dark:text-gray-300">
-                              {{ formatTimestamp((tool.params._timeFilter as { startTs: number }).startTs) }}
-                            </span>
-                            <span class="mx-1">至</span>
-                            <span class="text-gray-600 dark:text-gray-300">
-                              {{ formatTimestamp((tool.params._timeFilter as { endTs: number }).endTs) }}
-                            </span>
-                          </div>
-                        </template>
-                        <template v-else-if="tool.name === 'get_member_stats'">
-                          <span class="text-gray-400">查询成员统计（前</span>
-                          <span class="mx-0.5 text-gray-600 dark:text-gray-300">{{ tool.params.top_n || 10 }}</span>
-                          <span class="text-gray-400">名）</span>
-                        </template>
-                        <template v-else-if="tool.name === 'get_time_stats'">
-                          <span class="text-gray-400">统计类型:</span>
-                          <span class="ml-1 text-gray-600 dark:text-gray-300">
-                            {{
-                              tool.params.type === 'hourly'
-                                ? '按小时'
-                                : tool.params.type === 'weekday'
-                                  ? '按星期'
-                                  : '按日期'
-                            }}
-                          </span>
-                        </template>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
             </template>
 
             <!-- AI 思考中指示器 -->

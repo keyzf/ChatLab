@@ -95,10 +95,11 @@ export function registerAIHandlers({ win }: IpcContext): void {
       role: 'user' | 'assistant',
       content: string,
       dataKeywords?: string[],
-      dataMessageCount?: number
+      dataMessageCount?: number,
+      contentBlocks?: aiConversations.ContentBlock[]
     ) => {
       try {
-        return aiConversations.addMessage(conversationId, role, content, dataKeywords, dataMessageCount)
+        return aiConversations.addMessage(conversationId, role, content, dataKeywords, dataMessageCount, contentBlocks)
       } catch (error) {
         console.error('添加 AI 消息失败：', error)
         throw error
