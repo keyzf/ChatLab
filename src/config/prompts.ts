@@ -17,9 +17,9 @@ import type { PromptPreset } from '@/types/chat'
 export const DEFAULT_GROUP_PRESET_ID = 'builtin-group-default'
 /** 默认私聊预设ID */
 export const DEFAULT_PRIVATE_PRESET_ID = 'builtin-private-default'
-/** 赛博判官群聊预设ID */
+/** 玩梗模式群聊预设ID */
 export const CYBER_JUDGE_GROUP_PRESET_ID = 'builtin-group-cyber-judge'
-/** 赛博判官私聊预设ID */
+/** 玩梗模式私聊预设ID */
 export const CYBER_JUDGE_PRIVATE_PRESET_ID = 'builtin-private-cyber-judge'
 /** 弱智吧群聊预设ID */
 export const RUOZHI_GROUP_PRESET_ID = 'builtin-group-ruozhi'
@@ -39,7 +39,7 @@ export function getDefaultRoleDefinition(
 ): string {
   const chatTypeDesc = chatType === 'private' ? '私聊' : '群聊'
 
-  // 赛博判官风格
+  // 玩梗模式风格
   if (style === 'cyber-judge') {
     return `你是一个混迹互联网多年的"赛博判官"和"顶级嘴替"。
 你的任务是基于工具提供的${chatTypeDesc}记录数据，对用户进行"降维打击"式的分析。
@@ -86,7 +86,7 @@ export function getDefaultResponseRules(
   chatType: 'group' | 'private',
   style: 'default' | 'cyber-judge' | 'ruozhi' = 'default'
 ): string {
-  // 赛博判官风格
+  // 玩梗模式风格
   if (style === 'cyber-judge') {
     const example =
       chatType === 'private'
@@ -171,10 +171,10 @@ const BUILTIN_GROUP_DEFAULT: PromptPreset = {
   updatedAt: Date.now(),
 }
 
-/** 内置群聊预设 - 赛博判官 */
+/** 内置群聊预设 - 玩梗模式 */
 const BUILTIN_GROUP_CYBER_JUDGE: PromptPreset = {
   id: CYBER_JUDGE_GROUP_PRESET_ID,
-  name: '赛博判官',
+  name: '玩梗模式',
   chatType: 'group',
   roleDefinition: getDefaultRoleDefinition('group', 'cyber-judge'),
   responseRules: getDefaultResponseRules('group', 'cyber-judge'),
@@ -195,10 +195,10 @@ const BUILTIN_PRIVATE_DEFAULT: PromptPreset = {
   updatedAt: Date.now(),
 }
 
-/** 内置私聊预设 - 赛博判官 */
+/** 内置私聊预设 - 玩梗模式 */
 const BUILTIN_PRIVATE_CYBER_JUDGE: PromptPreset = {
   id: CYBER_JUDGE_PRIVATE_PRESET_ID,
-  name: '赛博判官',
+  name: '玩梗模式',
   chatType: 'private',
   roleDefinition: getDefaultRoleDefinition('private', 'cyber-judge'),
   responseRules: getDefaultResponseRules('private', 'cyber-judge'),
@@ -207,10 +207,10 @@ const BUILTIN_PRIVATE_CYBER_JUDGE: PromptPreset = {
   updatedAt: Date.now(),
 }
 
-/** 内置群聊预设 - 弱智吧 */
+/** 内置群聊预设 - 弱智吧对话模式 */
 const BUILTIN_GROUP_RUOZHI: PromptPreset = {
   id: RUOZHI_GROUP_PRESET_ID,
-  name: '弱智吧',
+  name: '弱智吧对话模式',
   chatType: 'group',
   roleDefinition: getDefaultRoleDefinition('group', 'ruozhi'),
   responseRules: getDefaultResponseRules('group', 'ruozhi'),
@@ -219,10 +219,10 @@ const BUILTIN_GROUP_RUOZHI: PromptPreset = {
   updatedAt: Date.now(),
 }
 
-/** 内置私聊预设 - 弱智吧 */
+/** 内置私聊预设 - 弱智吧对话模式 */
 const BUILTIN_PRIVATE_RUOZHI: PromptPreset = {
   id: RUOZHI_PRIVATE_PRESET_ID,
-  name: '弱智吧',
+  name: '弱智吧对话模式',
   chatType: 'private',
   roleDefinition: getDefaultRoleDefinition('private', 'ruozhi'),
   responseRules: getDefaultResponseRules('private', 'ruozhi'),

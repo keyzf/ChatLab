@@ -125,7 +125,7 @@ function openExternalLink(url: string) {
           <div class="rounded-xl border border-gray-200 p-4 dark:border-gray-700">
             <div class="mb-3 flex items-center gap-2">
               <UIcon name="i-heroicons-device-phone-mobile" class="h-5 w-5 text-blue-500" />
-              <h3 class="font-semibold text-gray-900 dark:text-white">微信</h3>
+              <h3 class="font-semibold text-gray-900 dark:text-white">微信或其他聊天应用</h3>
             </div>
             <ol class="mb-4 space-y-2">
               <li class="flex items-start gap-3 text-sm text-gray-600 dark:text-gray-300">
@@ -134,7 +134,7 @@ function openExternalLink(url: string) {
                 >
                   1
                 </span>
-                <span>网络上工具较多，请自行找工具导出聊天记录</span>
+                <span>Github上有很多开源的导出工具，请自行找工具导出微信等软件的聊天记录</span>
               </li>
               <li class="flex items-start gap-3 text-sm text-gray-600 dark:text-gray-300">
                 <span
