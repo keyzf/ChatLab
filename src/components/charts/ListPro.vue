@@ -54,7 +54,7 @@ const formattedCount = computed(() => props.countTemplate.replace('{count}', Str
         <CaptureButton tooltip="截取列表" size="xs" type="element" :target-element="cardRef" />
 
         <!-- 完整列表弹窗 -->
-        <UModal v-model:open="isOpen" :ui="{ content: 'md:w-full max-w-4xl' }">
+        <UModal v-model:open="isOpen" :ui="{ content: 'md:w-full max-w-3xl' }">
           <UButton v-if="showViewAll" icon="i-heroicons-list-bullet" variant="ghost">完整排行</UButton>
           <template #content>
             <div ref="modalBodyRef" class="section-content flex flex-col">
@@ -69,7 +69,7 @@ const formattedCount = computed(() => props.countTemplate.replace('{count}', Str
                 <CaptureButton tooltip="截取完整列表" size="xs" type="element" :target-element="modalBodyRef" />
               </div>
               <!-- Body -->
-              <div class="max-h-[60vh] divide-y divide-gray-100 overflow-y-auto dark:divide-gray-800">
+              <div class="max-h-[60vh] p-4 divide-y divide-gray-100 overflow-y-auto dark:divide-gray-800">
                 <div v-for="(item, index) in items" :key="index" class="px-5 py-3">
                   <slot name="item" :item="item" :index="index" />
                 </div>

@@ -25,7 +25,7 @@ function closeModal() {
 </script>
 
 <template>
-  <UModal v-model:open="isOpen" :ui="{ content: 'max-w-5xl z-100' }">
+  <UModal v-model:open="isOpen" :ui="{ content: 'max-w-4xl z-100' }">
     <template #content>
       <div class="flex flex-col">
         <!-- Header -->
@@ -47,9 +47,6 @@ function closeModal() {
         <div class="bg-gray-100 p-4 dark:bg-gray-800">
           <div class="mx-auto max-h-[60vh] overflow-auto rounded-lg bg-white shadow-lg dark:bg-gray-900">
             <img v-if="imageData" :src="imageData" alt="截图预览" class="block w-full" />
-            <div v-else class="flex h-48 items-center justify-center text-gray-400">
-              <span>暂无截图</span>
-            </div>
           </div>
         </div>
       </div>

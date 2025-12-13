@@ -68,7 +68,7 @@ const showViewAll = computed(() => {
                 <CaptureButton tooltip="截取完整排行" size="xs" type="element" :target-element="modalBodyRef" />
               </div>
               <!-- Body -->
-              <div class="max-h-[60vh] overflow-y-auto">
+              <div class="max-h-[60vh] p-4 overflow-y-auto">
                 <RankList :members="members" :unit="unit" />
               </div>
             </div>
