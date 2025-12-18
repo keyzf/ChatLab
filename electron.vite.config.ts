@@ -1,17 +1,15 @@
 import { resolve } from 'path'
-import { defineConfig, externalizeDepsPlugin, loadEnv } from 'electron-vite'
+import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import vue from '@vitejs/plugin-vue'
 import ui from '@nuxt/ui/vite'
 
-export default defineConfig(({ mode }) => {
-  // 加载环境变量（带 MAIN_VITE_ 前缀）
-  const env = loadEnv(mode)
-
+export default defineConfig(() => {
   return {
     main: {
       plugins: [externalizeDepsPlugin()],
       define: {
-        'process.env.APTABASE_APP_KEY': JSON.stringify(env.MAIN_VITE_APTABASE_APP_KEY || ''),
+        // 使用系统环境变量
+        'process.env.APTABASE_APP_KEY': JSON.stringify(process.env.APTABASE_APP_KEY || ''),
       },
       build: {
         rollupOptions: {
