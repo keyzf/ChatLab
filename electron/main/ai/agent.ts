@@ -449,6 +449,7 @@ export class Agent {
       let displayedContent = '' // 已发送给前端的内容
       let toolCalls: ToolCall[] | undefined
       let isBufferingToolCall = false // 是否正在缓冲 tool_call 内容
+      let isBufferingThink = false // 是否正在缓冲 <think> 内容
 
       // 流式调用 LLM（传入 abortSignal）
       for await (const chunk of chatStream(this.messages, {
@@ -469,6 +470,33 @@ export class Agent {
         if (chunk.content) {
           accumulatedContent += chunk.content
 
+          // 检测是否开始出现 <think> 标签（过滤思考内容）
+          if (!isBufferingThink && /<think>/i.test(accumulatedContent)) {
+            isBufferingThink = true
+            // 发送 <think> 标签之前的内容
+            const thinkStart = accumulatedContent.toLowerCase().indexOf('<think>')
+            if (thinkStart > displayedContent.length) {
+              const newContent = accumulatedContent.slice(displayedContent.length, thinkStart)
+              if (newContent) {
+                onChunk({ type: 'content', content: newContent })
+                displayedContent = accumulatedContent.slice(0, thinkStart)
+              }
+            }
+          }
+
+          // 检测 </think> 结束标签，退出思考缓冲模式
+          if (isBufferingThink && /<\/think>/i.test(accumulatedContent)) {
+            isBufferingThink = false
+            // 跳过 <think>...</think> 内容，更新 displayedContent
+            const thinkEnd = accumulatedContent.toLowerCase().indexOf('</think>') + '</think>'.length
+            displayedContent = accumulatedContent.slice(0, thinkEnd)
+          }
+
+          // 如果正在缓冲思考内容，不发送
+          if (isBufferingThink) {
+            continue
+          }
+
           // 检测是否开始出现 <tool_call> 标签（用于 fallback 解析）
           if (!isBufferingToolCall) {
             if (/<tool_call>/i.test(accumulatedContent)) {
@@ -483,9 +511,12 @@ export class Agent {
                 }
               }
             } else {
-              // 正常发送内容
-              onChunk({ type: 'content', content: chunk.content })
-              displayedContent = accumulatedContent
+              // 正常发送内容（但要排除已发送的部分）
+              const newContent = accumulatedContent.slice(displayedContent.length)
+              if (newContent) {
+                onChunk({ type: 'content', content: newContent })
+                displayedContent = accumulatedContent
+              }
             }
           }
           // 如果已经在缓冲模式，不发送内容
