@@ -158,6 +158,14 @@ function getSessionAvatarText(session: AnalysisSession): string {
     return name.length <= 2 ? name : name.slice(0, 2)
   }
 }
+
+// 获取会话头像 URL（群聊用 groupAvatar，私聊用 memberAvatar）
+function getSessionAvatar(session: AnalysisSession): string | null {
+  if (isPrivateChat(session)) {
+    return session.memberAvatar || null
+  }
+  return session.groupAvatar || null
+}
 </script>
 
 <template>
@@ -207,26 +215,26 @@ function getSessionAvatarText(session: AnalysisSession): string {
     </div>
 
     <!-- Session List -->
-    <div class="flex-1 relative min-h-0 px-4 flex flex-col">
+    <div class="flex-1 relative min-h-0 flex flex-col">
       <!-- 聊天记录标题 - 固定在顶部，不随列表滚动 -->
       <UTooltip
         v-if="!isCollapsed && sessions.length > 0"
         :text="t('sidebar.tooltip.hint')"
         :popper="{ placement: 'right' }"
       >
-        <div class="px-3 mb-2 flex items-center gap-1">
+        <div class="px-7 mb-2 flex items-center gap-1">
           <div class="text-sm font-medium text-gray-500">{{ t('sidebar.chatHistory') }}</div>
           <UIcon name="i-heroicons-question-mark-circle" class="size-3.5 text-gray-400" />
         </div>
       </UTooltip>
 
-      <!-- 聊天记录列表 - 可滚动区域 -->
+      <!-- 聊天记录列表 - 可滚动区域，滚动条贴边 -->
       <div class="flex-1 overflow-y-auto">
         <div v-if="sessions.length === 0 && !isCollapsed" class="py-8 text-center text-sm text-gray-500">
           {{ t('sidebar.noRecords') }}
         </div>
 
-        <div class="space-y-1 pb-8">
+        <div class="space-y-1 pb-8" :class="[isCollapsed ? '' : 'px-4']">
           <UTooltip
             v-for="session in sortedSessions"
             :key="session.id"
@@ -235,17 +243,27 @@ function getSessionAvatarText(session: AnalysisSession): string {
           >
             <UContextMenu :items="getContextMenuItems(session)">
               <div
-                class="group relative flex w-full items-center rounded-full p-2 text-left transition-colors"
+                class="group relative flex items-center p-2 text-left transition-colors"
                 :class="[
                   route.params.id === session.id && !isCollapsed
                     ? 'bg-primary-100 text-gray-900 dark:bg-primary-900/30 dark:text-primary-100'
                     : 'text-gray-700 dark:text-gray-200 hover:bg-gray-200/60 dark:hover:bg-gray-800',
-                  isCollapsed ? 'justify-center cursor-pointer' : 'cursor-pointer',
+                  isCollapsed ? 'justify-center cursor-pointer h-13 w-13 rounded-full ml-3.5' : 'cursor-pointer w-full rounded-full',
                 ]"
                 @click="router.push({ name: getSessionRouteName(session), params: { id: session.id } })"
               >
-                <!-- Platform Icon / Text Avatar - 私聊和群聊使用不同样式 -->
+                <!-- 会话头像 -->
+                <!-- 有头像图片时显示图片 -->
+                <img
+                  v-if="getSessionAvatar(session)"
+                  :src="getSessionAvatar(session)!"
+                  :alt="session.name"
+                  class="h-9 w-9 min-w-9 shrink-0 rounded-full object-cover"
+                  :class="[isCollapsed ? '' : 'mr-3']"
+                />
+                <!-- 无头像时显示图标/文字 -->
                 <div
+                  v-else
                   class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[10px] font-bold"
                   :class="[
                     route.params.id === session.id
@@ -291,6 +309,10 @@ function getSessionAvatarText(session: AnalysisSession): string {
           </UTooltip>
         </div>
       </div>
+      <!-- 底部渐变蒙层 - 让列表消失更自然（固定在外层容器底部） -->
+      <div
+        class="pointer-events-none absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-gray-50 to-transparent dark:from-gray-900"
+      />
     </div>
 
     <!-- Rename Modal -->

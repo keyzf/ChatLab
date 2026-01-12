@@ -232,6 +232,7 @@ export interface AnalysisSession {
   groupId: string | null // 群ID（群聊类型有值，私聊为空）
   groupAvatar: string | null // 群头像（base64 Data URL）
   ownerId: string | null // 所有者/导出者的 platformId
+  memberAvatar: string | null // 私聊对方头像（base64 Data URL）
 }
 
 /**
